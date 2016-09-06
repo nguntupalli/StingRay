@@ -7,11 +7,13 @@ import org.apache.http.NameValuePair;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
+import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
@@ -21,15 +23,20 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Created by z001j60 on 9/4/16.
+ * @author Naresh
  */
 public class ThreadPoolTest {
 
-
     private static final String TOKEN = "/token";
+    private static final String NOTIFICATION_TYPES = "/api/notifications/GetNotificationTypes";
     private static final String SEND_NOTIFICATION = "/api/notifications/SendNotification";
 
     private static final HttpClient httpClient = HttpClients.createDefault();
@@ -37,27 +44,61 @@ public class ThreadPoolTest {
 
     public static void main(String[] args)
     {
-        if (args.length != 1) {
-            System.out.println("Missing url. Usage: com.stingray.app.StingRayApp <url>");
+        if (args.length < 2) {
+            System.out.println("Missing url. Usage: com.stingray.app.StingRayApp <url> " +
+                    "<action> <parallel threads> \n" +
+                    "Action: notificationTypes or test");
             System.exit(1);
         }
 
         final String url = args[0];
+        final String action = args[1];
+        int parallelThreads = 10;
+        if (args.length == 3) {
+            parallelThreads = Integer.parseInt(args[2]);
+        }
 
         // Get a token
         final String token = getToken(url);
         System.out.println("Received token: " + token);
 
-        final HttpPost post = createNotificationRequest(url, token, 1);
-        final HttpResponse response = executeRequest2(post);
-        printResponse(response.getEntity());
-        final String result = response.getStatusLine().getStatusCode() + "";
+        if (action.equals("notificationTypes")) {
+            // Get Notification types
+            final Iterator<JSONObject> notificationTypes = getNotificationTypes(url, token);
+            while (notificationTypes.hasNext()) {
+                JSONObject object = notificationTypes.next();
+                System.out.println(object.toJSONString());
+            }
+        } else {
+            //final HttpPost post = createNotificationRequest(url, token, 1);
+            //final HttpResponse response = executeRequest2(post);
+            //printResponse(response.getEntity());
+            //final String result = response.getStatusLine().getStatusCode() + "";
+            //System.out.println(result);
 
-//        ExecutorService fixedPool = Executors.newFixedThreadPool(10);
-//        for (int i=0; i<10; i++) {
-//            fixedPool.submit(getCallable(url, token, i));
-//        }
-//        shutdownAndAwaitTermination(fixedPool);
+            ExecutorService fixedPool = Executors.newFixedThreadPool(10);
+            for (int i=0; i<2; i++) {
+                fixedPool.submit(getCallable(url, token, i));
+            }
+            shutdownAndAwaitTermination(fixedPool);
+        }
+    }
+
+    private static Callable getCallable(final String url, final String token, final int number) {
+        // Create a Callable object of anonymous class
+        Callable<String> aCallable = new Callable<String>(){
+            String result = "";
+            public String call() throws Exception {
+                final HttpPost post = createNotificationRequest(url, token, number);
+                final HttpResponse response = executeRequest2(post);
+                result = response.getStatusLine().getStatusCode() + "";
+                System.out.format("Thread: %d, status: %s, ", number, result);
+                printResponse(response.getEntity());
+                System.out.println();
+                return result;
+            }
+        };
+        return aCallable;
     }
 
     private static String getToken(final String url) {
@@ -67,6 +108,30 @@ public class ThreadPoolTest {
         //printResponse(response);
         if (json != null) {
             return (String) json.get("access_token");
+        } else {
+            throw new RuntimeException("Token fetch failed, try again later.");
+        }
+    }
+
+    private static Iterator<JSONObject> getNotificationTypes(final String url, final String token) {
+        JSONArray jsonArray = null;
+        final HttpGet request = createGetRequest(url + NOTIFICATION_TYPES, token);
+        final HttpEntity response = executeRequest(request);
+
+        try {
+            if (response != null) {
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(response.getContent()));
+                jsonArray = (JSONArray) parser.parse(reader);
+            }
+        } catch(ParseException pe) {
+            pe.printStackTrace();
+        } catch (IOException ioe) {
+            ioe.printStackTrace();
+        }
+
+        if (jsonArray != null) {
+            return jsonArray.iterator();
         } else {
             throw new RuntimeException("Token fetch failed, try again later.");
         }
@@ -86,6 +151,14 @@ public class ThreadPoolTest {
             ioe.printStackTrace();
         }
         return jsonObject;
+    }
+
+    private static HttpGet createGetRequest(final String url, final String token) {
+        HttpGet request = new HttpGet(url);
+        request.addHeader("content-type", "application/x-www-form-urlencoded");
+        request.addHeader("Authorization", "Bearer " + token);
+
+        return request;
     }
 
     private static HttpPost createNotificationRequest(final String url, final String token, final int number) {
@@ -147,27 +220,10 @@ public class ThreadPoolTest {
         return null;
     }
 
-    private static HttpResponse executeRequest2(final HttpPost httpPost) {
+    private static HttpResponse executeRequest2(final HttpPost request) {
         try {
-
-
-            // Request parameters and other properties.
-            List<NameValuePair> params = new ArrayList<NameValuePair>();
-            params.add(new BasicNameValuePair("notificationName", "KD-PY-Scheduled-Test2"));
-            params.add(new BasicNameValuePair("notificationBody", "some body"));
-            params.add(new BasicNameValuePair("notificationSubject", "some subject"));
-            params.add(new BasicNameValuePair("sendToUser", "user" + 1 + "@user.com"));
-            params.add(new BasicNameValuePair("scheduledDate", "9/6/2016 12:00:00 AM"));
-            params.add(new BasicNameValuePair("notificationTypeID", "1"));
-
-            try {
-                httpPost.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
-            }
-
-            HttpResponse response = httpClient.execute(httpPost);
-            System.out.println(response);
+            HttpResponse response = httpClient.execute(request);
+            //System.out.println(response);
             return response;
         } catch (ClientProtocolException e) {
             e.printStackTrace();
@@ -175,6 +231,24 @@ public class ThreadPoolTest {
             e.printStackTrace();
         }
         return null;
+    }
+
+    private static void shutdownAndAwaitTermination(ExecutorService pool) {
+        pool.shutdown(); // Disable new tasks from being submitted
+        try {
+            // Wait a while for existing tasks to terminate
+            if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
+                pool.shutdownNow(); // Cancel currently executing tasks
+                // Wait a while for tasks to respond to being cancelled
+                if (!pool.awaitTermination(60, TimeUnit.SECONDS))
+                    System.err.println("Pool did not terminate");
+            }
+        } catch (InterruptedException ie) {
+            // (Re-)Cancel if current thread also interrupted
+            pool.shutdownNow();
+            // Preserve interrupt status
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static void printResponse(final HttpEntity entity) {

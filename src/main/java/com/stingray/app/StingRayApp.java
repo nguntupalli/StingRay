@@ -40,16 +40,16 @@ public class StingRayApp
     {
         if (args.length < 2) {
             System.out.println("Missing url. Usage: com.stingray.app.StingRayApp <url> " +
-                    "<action> <parallel threads> \n" +
+                    "<action> <emailsCount> \n" +
                     "Action: notificationTypes or test");
             System.exit(1);
         }
 
         final String url = args[0];
         final String action = args[1];
-        int parallelThreads = 10;
+        int emailsCount = 10;
         if (args.length == 3) {
-          parallelThreads = Integer.parseInt(args[2]);
+            emailsCount = Integer.parseInt(args[2]);
         }
 
         // Get a token
@@ -64,17 +64,12 @@ public class StingRayApp
                 System.out.println(object.toJSONString());
             }
         } else {
-            //final HttpPost post = createNotificationRequest(url, token, 1);
-            //final HttpResponse response = executeRequest2(post);
-            //printResponse(response.getEntity());
-            //final String result = response.getStatusLine().getStatusCode() + "";
-            //System.out.println(result);
-
-            ExecutorService fixedPool = Executors.newFixedThreadPool(10);
-            for (int i=0; i<2; i++) {
-                fixedPool.submit(getCallable(url, token, i));
-            }
-            shutdownAndAwaitTermination(fixedPool);
+            final HttpPost post = createNotificationRequest(url, token, emailsCount);
+            final HttpResponse response = executeRequest2(post);
+            final String status = response.getStatusLine().getStatusCode() + "";
+            System.out.format("SendNotification request status: %s, response: ", status);
+            printResponse(response.getEntity());
+            System.out.println();
         }
     }
 
@@ -155,7 +150,7 @@ public class StingRayApp
         return request;
     }
 
-    private static HttpPost createNotificationRequest(final String url, final String token, final int number) {
+    private static HttpPost createNotificationRequest(final String url, final String token, final int emailsCount) {
         HttpPost httpPost = new HttpPost(url + SEND_NOTIFICATION);
         httpPost.addHeader("content-type", "application/x-www-form-urlencoded");
         httpPost.addHeader("Authorization", "Bearer " + token);
@@ -165,9 +160,21 @@ public class StingRayApp
         params.add(new BasicNameValuePair("notificationName", "KD-PY-Scheduled-Test2"));
         params.add(new BasicNameValuePair("notificationBody", "some body"));
         params.add(new BasicNameValuePair("notificationSubject", "some subject"));
-        params.add(new BasicNameValuePair("sendToUser", "user" + number + "@user.com"));
         params.add(new BasicNameValuePair("scheduledDate", "9/6/2016 12:00:00 AM"));
         params.add(new BasicNameValuePair("notificationTypeID", "1"));
+
+        final StringBuilder sb = new StringBuilder();
+        final String emailPrefix = "user";
+        final String emailSuffix = "@user.com";
+        final String comma = ",";
+        for (int i=0; i<emailsCount; i++) {
+            sb.append(emailPrefix + i +emailSuffix);
+            if (i+1 < emailsCount) {
+                sb.append(comma);
+            }
+        }
+        System.out.println("Notification is being sent to: " + sb.toString());
+        params.add(new BasicNameValuePair("sendToUser", sb.toString()));
 
         try {
             httpPost.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
@@ -225,24 +232,6 @@ public class StingRayApp
             e.printStackTrace();
         }
         return null;
-    }
-
-    private static void shutdownAndAwaitTermination(ExecutorService pool) {
-        pool.shutdown(); // Disable new tasks from being submitted
-        try {
-            // Wait a while for existing tasks to terminate
-            if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
-                pool.shutdownNow(); // Cancel currently executing tasks
-                // Wait a while for tasks to respond to being cancelled
-                if (!pool.awaitTermination(60, TimeUnit.SECONDS))
-                    System.err.println("Pool did not terminate");
-            }
-        } catch (InterruptedException ie) {
-            // (Re-)Cancel if current thread also interrupted
-            pool.shutdownNow();
-            // Preserve interrupt status
-            Thread.currentThread().interrupt();
-        }
     }
 
     private static void printResponse(final HttpEntity entity) {
