@@ -4,7 +4,7 @@
 
 Unix/Linux/Mac:
 
-java -cp target/stingray-app-1.0-SNAPSHOT-jar-with-dependencies.jar:target/stingray-app-1.0-SNAPSHOT.jar com.stingray.app.StingRayApp http://informee.net test 100
+java -cp libs/stingray-app-1.0-SNAPSHOT-jar-with-dependencies.jar:libs/stingray-app-1.0-SNAPSHOT.jar com.stingray.app.StingRayApp http://informee.net test 100
 
 The above command uses 3 args: "http://informee.net test 100", where first arg is the api url, 
 second arg is "test" for running the notifications test, third arg is the total emails to be sent.
@@ -13,7 +13,7 @@ second arg is "test" for running the notifications test, third arg is the total 
 
 Unix/Linux/Mac:
 
-java -cp target/stingray-app-1.0-SNAPSHOT-jar-with-dependencies.jar:target/stingray-app-1.0-SNAPSHOT.jar com.stingray.app.StingRayApp http://informee.net notificationTypes
+java -cp libs/stingray-app-1.0-SNAPSHOT-jar-with-dependencies.jar:libs/stingray-app-1.0-SNAPSHOT.jar com.stingray.app.StingRayApp http://informee.net notificationTypes
 
 ### Building the project
 
